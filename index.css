@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-amazon-dark: #232f3e;
+  --color-amazon-light: #37475a;
+  --color-amazon-orange: #ff9900;
+  --color-amazon-blue: #007185;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.25s ease-out forwards;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1; 
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8; 
+}

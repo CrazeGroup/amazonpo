@@ -1,0 +1,1 @@
+{"name":"Amazon PO Automation","description":"Automation tool to process Amazon Vendor Central Purchase Orders, validating stock and Units per Outer.","requestFramePermissions":[],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}

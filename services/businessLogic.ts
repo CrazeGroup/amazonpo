@@ -210,22 +210,24 @@ export const processPOData = (
     let finalAvailStatus = row['Availability Status'];
     
     // Priority logic for Status text
-    if (comments.includes("ROUNDED TO OUTER") && !comments.includes("INSUFFICIENT STOCK - PARTIAL")) {
-        finalAvailStatus = "Accepted: In stock";
+    if (isRejected || expectedQty === 0) {
+      if (comments.includes("EOL REJECTED")) {
+        finalAvailStatus = "Cancelled: Discontinued";
+      } else if (comments.includes("WRONG QTY REJECT")) {
+        finalAvailStatus = "Cancelled: Does not meet minimum";
+      } else if (comments.includes("SKU NOT FOUND IN OUTER")) {
+        finalAvailStatus = "Cancelled: Does not meet minimum";
+      } else if (comments.includes("STOCK ALLOCATED TO PREVIOUS PO") || comments.includes("OOS REJECT")) {
+        finalAvailStatus = "Cancelled: Out of stock";
+      } else if (comments.includes("MANUAL REJECT")) {
+        finalAvailStatus = "Cancelled: Manual Rejection";
+      } else {
+        finalAvailStatus = "Cancelled: Out of stock";
+      }
     } else if (expectedQty > 0 && expectedQty < requestedQty) {
-        finalAvailStatus = "Accepted: Partial Quantity";
-    } else if (comments.includes("ACCEPTED")) {
+      finalAvailStatus = "Accepted: Partial Quantity";
+    } else {
       finalAvailStatus = "Accepted: In stock";
-    } else if (comments.includes("WRONG QTY REJECT")) {
-      finalAvailStatus = "Cancelled: Does not meet minimum";
-    } else if (comments.includes("EOL REJECTED")) {
-      finalAvailStatus = "Cancelled: Discontinued";
-    } else if (comments.includes("STOCK ALLOCATED TO PREVIOUS PO")) {
-      finalAvailStatus = "Cancelled: Out of stock";
-    } else if (comments.includes("OOS REJECT")) {
-      finalAvailStatus = "Cancelled: Out of stock";
-    } else if (comments.includes("MANUAL REJECT")) {
-      finalAvailStatus = "Cancelled: Manual Rejection";
     }
 
     // --- Final Calculations ---
@@ -335,32 +337,26 @@ export const recalculateRow = (row: ProcessedRow): ProcessedRow => {
   // --- Specific Text Updates for Availability Status (Recalculation) ---
   let finalAvailStatus = row['Availability Status'];
   
-  // Rule: If comment includes ACCEPTED, set Availability Status to "Accepted: In stock"
-  if (commentsStr.toLowerCase().includes("accepted")) {
-    finalAvailStatus = "Accepted: In stock";
-  } else if (commentsStr.includes("ROUNDED TO OUTER") && expectedQty > 0 && expectedQty < requestedQty) {
-    finalAvailStatus = "Accepted: Partial Quantity"; // If rounded to outer and partial
-  } else if (expectedQty > 0 && expectedQty < requestedQty) {
-      finalAvailStatus = "Accepted: Partial Quantity";
-  } else if (commentsStr.includes("WRONG QTY REJECT")) {
+  if (isRejected || expectedQty === 0) {
+    if (commentsStr.includes("EOL REJECTED")) {
+      finalAvailStatus = "Cancelled: Discontinued";
+    } else if (commentsStr.includes("WRONG QTY REJECT")) {
       finalAvailStatus = "Cancelled: Does not meet minimum";
-  } else if (commentsStr.includes("EOL REJECTED")) {
-    finalAvailStatus = "Cancelled: Discontinued";
-  } else if (commentsStr.includes("STOCK ALLOCATED TO PREVIOUS PO")) {
+    } else if (commentsStr.includes("SKU NOT FOUND IN OUTER")) {
+      finalAvailStatus = "Cancelled: Does not meet minimum";
+    } else if (commentsStr.includes("STOCK ALLOCATED TO PREVIOUS PO") || commentsStr.includes("OOS REJECT")) {
       finalAvailStatus = "Cancelled: Out of stock";
-  } else if (commentsStr.includes("OOS REJECT")) {
-    finalAvailStatus = "Cancelled: Out of stock";
-  } else if (commentsStr.includes("MANUAL REJECT")) {
-    finalAvailStatus = "Cancelled: Manual Rejection";
+    } else if (commentsStr.includes("MANUAL REJECT")) {
+      finalAvailStatus = "Cancelled: Manual Rejection";
+    } else {
+      finalAvailStatus = "Cancelled: Out of stock";
+    }
+  } else if (expectedQty > 0 && expectedQty < requestedQty) {
+    finalAvailStatus = "Accepted: Partial Quantity";
   } else if (expectedQty === requestedQty && requestedQty > 0) {
-    // Fallback if no specific comment matched, but quantities are full
     finalAvailStatus = "Accepted: In stock";
-  } else if (expectedQty === 0 && requestedQty > 0) {
-    // Fallback if no specific comment matched, and quantity is 0
-    finalAvailStatus = "Cancelled: Manual Rejection";
   } else {
-    // Default or original status if no other rule applies
-    finalAvailStatus = "Accepted: In stock"; // Assume in stock if nothing else is specified and expected quantity is not 0.
+    finalAvailStatus = "Accepted: In stock";
   }
 
 

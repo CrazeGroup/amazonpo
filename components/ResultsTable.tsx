@@ -8,6 +8,7 @@ export interface ResultsTableHandle {
 interface ResultsTableProps {
   data: ProcessedRow[];
   onRowUpdate: (id: string, updatedRow: ProcessedRow) => void;
+  isFullscreen?: boolean;
 }
 
 type SortDirection = 'asc' | 'desc' | null;
@@ -431,7 +432,7 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   'Total Cancelled': 100
 };
 
-export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({ data, onRowUpdate }, ref) => {
+export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({ data, onRowUpdate, isFullscreen }, ref) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [activeFilters, setActiveFilters] = useState<Record<string, string[] | null>>({});
   const [openFilter, setOpenFilter] = useState<{ field: string; top: number; left: number } | null>(null);
@@ -623,7 +624,11 @@ export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({
   const inputClass = "w-full px-1 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-gray-300 focus:border-amazon-blue rounded focus:ring-1 focus:ring-amazon-blue outline-none transition-colors text-xs truncate";
 
   return (
-    <div className="overflow-x-auto shadow-md sm:rounded-lg border border-gray-200 bg-white min-h-[400px] pb-32">
+    <div className={`overflow-x-auto overflow-y-auto border border-gray-200 bg-white ${
+      isFullscreen 
+        ? 'flex-1 h-full max-h-none rounded-none' 
+        : 'min-h-[400px] max-h-[75vh] pb-32 sm:rounded-lg shadow-md'
+    }`}>
       
       <ReasonModal 
         isOpen={!!modalRow} 

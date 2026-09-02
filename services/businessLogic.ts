@@ -3,10 +3,16 @@ import { POInputRow, TagRow, AvailabilityRow, OuterRow, ProcessedRow } from '../
 // Helper to normalize keys (trim spaces, handle slight variations)
 const normalize = (str: string | number | undefined) => str ? String(str).trim() : '';
 
-// Helper to strip standard regional suffixes to find root SKU
+// Helper to normalize SKU codes (removes spaces, hyphens, underscores)
+const normalizeSku = (str: string | number | undefined): string => {
+  if (!str) return '';
+  return String(str).trim().replace(/[\s\-_]+/g, '');
+};
+
+// Helper to strip standard regional & wave suffixes to find root SKU
 const getRootSku = (sku: string): string => {
-  const normalized = normalize(sku).toUpperCase();
-  return normalized.replace(/(DE|EN|UK|FR|ES|IT)$/i, '');
+  const normalized = normalizeSku(sku).toUpperCase();
+  return normalized.replace(/(DE|EN|UK|FR|ES|IT|W2|W1|W|V2|V1)$/i, '');
 };
 
 // Helper to find best matching SKU in a given Map (for stock or outer)
@@ -17,18 +23,32 @@ const findBestSkuMatch = <T>(
   getStockQty?: (val: T) => number
 ): { matchedSku: string | null; value: T | null } => {
   const original = normalize(targetSku);
+  const cleanOriginal = normalizeSku(targetSku);
   if (!original) return { matchedSku: null, value: null };
 
-  const root = getRootSku(original);
+  const root = getRootSku(cleanOriginal) || cleanOriginal;
   
-  // 1. Direct prioritized suffixes based on region and wave/variant codes (W2, W1, W, DE, EN, etc.)
-  const candidateSuffixes = region === 'DE'
+  // Prioritized suffix list based on PO region
+  const suffixes = region === 'DE'
     ? ['DE', '', 'EN', 'W2', 'W1', 'W2DE', 'W2EN', 'DEW2', 'ENW2', 'W', 'V2', 'V1', 'UK']
-    : ['EN', '', 'DE', 'W2', 'W1', 'W2EN', 'W2DE', 'ENW2', 'DEW2', 'W', 'V2', 'V1', 'UK'];
+    : ['EN', 'DE', '', 'W2', 'W1', 'W2EN', 'W2DE', 'ENW2', 'DEW2', 'W', 'V2', 'V1', 'UK'];
 
-  // Check candidates on original SKU first (prioritize positive stock if applicable)
-  for (const suf of candidateSuffixes) {
-    const candidate = suf ? `${original}${suf}` : original;
+  // Build unique candidates list from ROOT first, then clean original, then original
+  const candidateSet = new Set<string>();
+  
+  // Primary: Root + suffixes
+  for (const suf of suffixes) {
+    candidateSet.add(suf ? `${root}${suf}` : root);
+  }
+  
+  // Secondary: Clean original
+  candidateSet.add(cleanOriginal);
+  candidateSet.add(original);
+
+  const candidates = Array.from(candidateSet);
+
+  // Pass 1: Find candidate with positive available stock (> 0)
+  for (const candidate of candidates) {
     if (map.has(candidate)) {
       const val = map.get(candidate)!;
       if (!getStockQty || getStockQty(val) > 0) {
@@ -37,42 +57,20 @@ const findBestSkuMatch = <T>(
     }
   }
 
-  // Check candidates on root SKU (if original had a suffix like DE/EN)
-  if (root && root !== original) {
-    for (const suf of candidateSuffixes) {
-      const candidate = suf ? `${root}${suf}` : root;
-      if (map.has(candidate)) {
-        const val = map.get(candidate)!;
-        if (!getStockQty || getStockQty(val) > 0) {
-          return { matchedSku: candidate, value: val };
-        }
-      }
-    }
-  }
-
-  // 2. Fallback: check candidates on original or root even if stock is 0
-  for (const suf of candidateSuffixes) {
-    const candidate = suf ? `${original}${suf}` : original;
+  // Pass 2: Fallback to any matching candidate present in map (even if stock is 0 or negative)
+  for (const candidate of candidates) {
     if (map.has(candidate)) {
       return { matchedSku: candidate, value: map.get(candidate)! };
     }
   }
-  if (root && root !== original) {
-    for (const suf of candidateSuffixes) {
-      const candidate = suf ? `${root}${suf}` : root;
-      if (map.has(candidate)) {
-        return { matchedSku: candidate, value: map.get(candidate)! };
-      }
-    }
-  }
 
-  // 3. Prefix matching: Find any SKU in map that starts with original or root
-  const searchPrefix = (root || original).toUpperCase();
+  // Pass 3: Prefix matching (e.g. if map has "52334 DE" or "52334W2-PACK")
+  const searchPrefix = root.toUpperCase();
   const prefixMatches: { key: string; val: T }[] = [];
   
   for (const [key, val] of map.entries()) {
-    const upperKey = key.toUpperCase();
-    if (upperKey.startsWith(searchPrefix) || upperKey.startsWith(original.toUpperCase())) {
+    const cleanKey = normalizeSku(key).toUpperCase();
+    if (cleanKey.startsWith(searchPrefix) || cleanKey.startsWith(cleanOriginal.toUpperCase())) {
       prefixMatches.push({ key, val });
     }
   }

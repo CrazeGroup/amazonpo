@@ -3,6 +3,93 @@ import { POInputRow, TagRow, AvailabilityRow, OuterRow, ProcessedRow } from '../
 // Helper to normalize keys (trim spaces, handle slight variations)
 const normalize = (str: string | number | undefined) => str ? String(str).trim() : '';
 
+// Helper to strip standard regional suffixes to find root SKU
+const getRootSku = (sku: string): string => {
+  const normalized = normalize(sku).toUpperCase();
+  return normalized.replace(/(DE|EN|UK|FR|ES|IT)$/i, '');
+};
+
+// Helper to find best matching SKU in a given Map (for stock or outer)
+const findBestSkuMatch = <T>(
+  targetSku: string,
+  region: 'DE' | 'EU' | 'UK' | string,
+  map: Map<string, T>,
+  getStockQty?: (val: T) => number
+): { matchedSku: string | null; value: T | null } => {
+  const original = normalize(targetSku);
+  if (!original) return { matchedSku: null, value: null };
+
+  const root = getRootSku(original);
+  
+  // 1. Direct prioritized suffixes based on region and wave/variant codes (W2, W1, W, DE, EN, etc.)
+  const candidateSuffixes = region === 'DE'
+    ? ['DE', '', 'EN', 'W2', 'W1', 'W2DE', 'W2EN', 'DEW2', 'ENW2', 'W', 'V2', 'V1', 'UK']
+    : ['EN', '', 'DE', 'W2', 'W1', 'W2EN', 'W2DE', 'ENW2', 'DEW2', 'W', 'V2', 'V1', 'UK'];
+
+  // Check candidates on original SKU first (prioritize positive stock if applicable)
+  for (const suf of candidateSuffixes) {
+    const candidate = suf ? `${original}${suf}` : original;
+    if (map.has(candidate)) {
+      const val = map.get(candidate)!;
+      if (!getStockQty || getStockQty(val) > 0) {
+        return { matchedSku: candidate, value: val };
+      }
+    }
+  }
+
+  // Check candidates on root SKU (if original had a suffix like DE/EN)
+  if (root && root !== original) {
+    for (const suf of candidateSuffixes) {
+      const candidate = suf ? `${root}${suf}` : root;
+      if (map.has(candidate)) {
+        const val = map.get(candidate)!;
+        if (!getStockQty || getStockQty(val) > 0) {
+          return { matchedSku: candidate, value: val };
+        }
+      }
+    }
+  }
+
+  // 2. Fallback: check candidates on original or root even if stock is 0
+  for (const suf of candidateSuffixes) {
+    const candidate = suf ? `${original}${suf}` : original;
+    if (map.has(candidate)) {
+      return { matchedSku: candidate, value: map.get(candidate)! };
+    }
+  }
+  if (root && root !== original) {
+    for (const suf of candidateSuffixes) {
+      const candidate = suf ? `${root}${suf}` : root;
+      if (map.has(candidate)) {
+        return { matchedSku: candidate, value: map.get(candidate)! };
+      }
+    }
+  }
+
+  // 3. Prefix matching: Find any SKU in map that starts with original or root
+  const searchPrefix = (root || original).toUpperCase();
+  const prefixMatches: { key: string; val: T }[] = [];
+  
+  for (const [key, val] of map.entries()) {
+    const upperKey = key.toUpperCase();
+    if (upperKey.startsWith(searchPrefix) || upperKey.startsWith(original.toUpperCase())) {
+      prefixMatches.push({ key, val });
+    }
+  }
+
+  if (prefixMatches.length > 0) {
+    if (getStockQty) {
+      const positiveStock = prefixMatches.find(m => getStockQty(m.val) > 0);
+      if (positiveStock) {
+        return { matchedSku: positiveStock.key, value: positiveStock.val };
+      }
+    }
+    return { matchedSku: prefixMatches[0].key, value: prefixMatches[0].val };
+  }
+
+  return { matchedSku: null, value: null };
+};
+
 export const processPOData = (
   poData: POInputRow[],
   tagsData: TagRow[],
@@ -55,61 +142,31 @@ export const processPOData = (
     const brand = tagsMap.get(asin) || '';
     
     // --- SKU SELECTION & RUNNING STOCK LOOKUP (for Availability) ---
-    // New logic: Prioritize SKU variant based on PO region.
-    let prioritizedSkuList: string[];
-    
-    if (region === 'DE') {
-        // For DE, prioritize local SKU, then base, then EN.
-        prioritizedSkuList = [originalSku + 'DE', originalSku, originalSku + 'EN'];
-    } else { // EU or UK
-        // For non-DE, EN SKU has absolute priority.
-        prioritizedSkuList = [originalSku + 'EN', originalSku, originalSku + 'DE'];
-    }
+    const stockMatch = findBestSkuMatch(
+      originalSku,
+      region,
+      runningStockMap,
+      (entry) => entry.qty
+    );
 
-    let foundSku: string | null = null;
-    for (const sku of prioritizedSkuList) {
-        if (runningStockMap.has(sku)) {
-            foundSku = sku;
-            break; // Found the highest priority SKU that exists, stop searching.
-        }
-    }
-
-    // Use the found SKU, or default back to the original from the PO file if no variants were found at all.
-    // This allows the downstream logic to correctly report "OOS REJECT" for a SKU not in the availability file.
-    const matchedSku = foundSku || originalSku;
-    
-    // Now get the availability info for the matched SKU. If not found in map, it will be qty: -1.
-    const availEntry = runningStockMap.get(matchedSku) || { qty: -1, status: '' };
+    const matchedSku = stockMatch.matchedSku || originalSku;
+    const availEntry = stockMatch.value || { qty: -1, status: '' };
     const initialAvailEntry = availMap.get(matchedSku) || { qty: -1, status: '' };
     
     // Current available quantity in the sequence
     const currentAvailableQty = availEntry.qty;
     const availStatusInfo = availEntry.status;
 
-
-    // --- OUTER LOOKUP (Independent Logic based on base SKU from PO) ---
-    let unitsPerOuter = -1; // Default to not found
-
-    // 1. Try exact match from PO's base SKU
-    if (outerMap.has(baseSkuFromPO)) {
-        unitsPerOuter = outerMap.get(baseSkuFromPO)!;
-    } 
-    // 2. If not found, try region-specific variants from PO's base SKU
-    //    Prioritize based on PO row's region
-    else {
-        if (region === 'DE') {
-            if (outerMap.has(baseSkuFromPO + 'DE')) {
-                unitsPerOuter = outerMap.get(baseSkuFromPO + 'DE')!;
-            } else if (outerMap.has(baseSkuFromPO + 'EN')) {
-                unitsPerOuter = outerMap.get(baseSkuFromPO + 'EN')!;
-            }
-        } else { // EU or UK
-            if (outerMap.has(baseSkuFromPO + 'EN')) {
-                unitsPerOuter = outerMap.get(baseSkuFromPO + 'EN')!;
-            } else if (outerMap.has(baseSkuFromPO + 'DE')) {
-                unitsPerOuter = outerMap.get(baseSkuFromPO + 'DE')!;
-            }
-        }
+    // --- OUTER LOOKUP (Checks matched SKU, base SKU, and regional/wave variants) ---
+    let unitsPerOuter = -1;
+    const outerMatch = findBestSkuMatch(matchedSku || baseSkuFromPO, region, outerMap);
+    if (outerMatch.value !== null && outerMatch.value !== undefined) {
+      unitsPerOuter = outerMatch.value;
+    } else if (matchedSku !== baseSkuFromPO) {
+      const fallbackOuterMatch = findBestSkuMatch(baseSkuFromPO, region, outerMap);
+      if (fallbackOuterMatch.value !== null && fallbackOuterMatch.value !== undefined) {
+        unitsPerOuter = fallbackOuterMatch.value;
+      }
     }
     
     // --- EST DATE LOGIC ---

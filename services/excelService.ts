@@ -201,7 +201,7 @@ const requiredPOFields = ['PO Number', 'ASIN', 'Amazon SKU', 'Quantity Requested
 
 // A region opts into PO validation; configuration files keep their own SKU column.
 export const parseWorkbook = <T>(workbook: XLSX_LIB.WorkBook, region?: Region): T[] => {
-  const sheetName = (region && workbook.SheetNames.find(name => headerKey(name) === 'line items')) || workbook.SheetNames[0];
+  const sheetName = workbook.SheetNames.find(name => headerKey(name) === 'line items') || workbook.SheetNames[0];
   if (!sheetName) throw new Error('The workbook contains no worksheets.');
   const worksheet = workbook.Sheets[sheetName];
   const mapKey = (key: string) => !region && headerKey(key) === 'sku'

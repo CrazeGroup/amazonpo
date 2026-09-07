@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { BulkFileUpload } from './components/BulkFileUpload';
 import { FileUpload } from './components/FileUpload';
 import { ResultsTable, ResultsTableHandle } from './components/ResultsTable';
 import { PivotTable } from './components/PivotTable';
@@ -326,6 +327,12 @@ const App: React.FC = () => {
             <button onClick={() => setError(null)} className="text-red-700 font-bold px-2">×</button>
           </div>
         )}
+
+        <BulkFileUpload disabled={isProcessing} onAssign={files => {
+          const setters = { DE: setPoFileDE, EU: setPoFileEU, UK: setPoFileUK, availability: setAvailFile, tags: setTagsFile, outer: setOuterFile };
+          files.forEach(({ file, slot }) => setters[slot](file));
+          setError(null);
+        }} />
 
         {/* Input Section - Ultra Compact & All in One Row (Grid 6) */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4">

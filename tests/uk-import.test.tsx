@@ -103,3 +103,36 @@ test('provided UK workbook audit', {skip:!processEnvFile()}, () => {
   assert.ok(process(rows).every(r=>r['Expected Quantity']===r['Quantity Requested'] && r.Currency==='GBP'));
 });
 function processEnvFile() { return globalThis.process.env.PO_UK_FILE; }
+
+// Bulk upload classification uses content, with explicit resolution of ambiguous regions.
+import { detectFileSlot, inspectBulkFile, duplicateSlots } from '../services/bulkImport';
+import { BulkFileUpload } from '../components/BulkFileUpload';
+test('bulk upload identifies all six file slots from workbook contents', async () => {
+  const makeFile = (rows: object[], name: string) => new File([XLSX.write(workbook(rows), {type:'buffer', bookType:'xlsx'})], name);
+  const files = [
+    makeFile([{...uk, Currency:'EUR'}], 'PO DE.xlsx'),
+    makeFile([{...uk, Currency:'EUR'}], 'PO EU.xlsx'),
+    makeFile([uk], 'download.xlsx'),
+    makeFile([{'Item No.':'34934', 'After Assembly Orders GMBH':200}], 'stock.xlsx'),
+    makeFile([{ASIN:uk.ASIN, Brand:'CRAZE'}], 'mapping.xlsx'),
+    makeFile([{'Article No.':'34934', 'Units Outer':12}], 'packing.xlsx'),
+  ];
+  assert.deepEqual(await Promise.all(files.map(inspectBulkFile)), ['DE','EU','UK','availability','tags','outer']);
+});
+test('bulk upload does not guess ambiguous regions or trust misleading config names', () => {
+  assert.equal(detectFileSlot([{'PO Number':'1', ASIN:'A', Currency:'EUR'}], 'orders.xlsx'), '');
+  assert.equal(detectFileSlot([{'PO Number':'1', ASIN:'A', Currency:'GBP'}], 'PO DE.xlsx'), '');
+  assert.equal(detectFileSlot([{ASIN:'A', Brand:'B'}], 'PO UK.xlsx'), 'tags');
+  assert.equal(detectFileSlot([{unknown:1}], 'availability.xlsx'), '');
+  assert.deepEqual(duplicateSlots(['UK','tags','UK','','']), ['UK']);
+});
+test('bulk upload reports unsupported or unreadable files', async () => {
+  await assert.rejects(inspectBulkFile(new File(['test'], 'test.txt')), /Only .xls/);
+  await assert.rejects(inspectBulkFile(new File([], 'empty.xlsx')));
+});
+test('bulk upload renders a multiple-file picker and accessible drop target', () => {
+  const html = renderToStaticMarkup(<BulkFileUpload disabled={false} onAssign={() => {}} />);
+  assert.match(html, /multiple=""/);
+  assert.match(html, /Drop all files here/);
+  assert.match(html, /role="status"/);
+});

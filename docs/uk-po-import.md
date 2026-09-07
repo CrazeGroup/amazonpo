@@ -32,3 +32,7 @@ Run `npm test`. To include the local source workbook audit:
 ```sh
 PO_UK_FILE='/Users/christianvidalwolf/Downloads/Po UK.xls' npm test
 ```
+
+## Bulk upload
+
+The shared drop zone accepts multiple `.xls` / `.xlsx` files in one drop or file-picker selection. It proposes Availability, Tags and Outer assignments from their columns. PO region detection uses a region token in the filename (DE, EU/ES/FR/IT, UK/GB) or GBP currency for UK; EUR alone cannot distinguish DE from EU. Review the assignments, choose any unresolved regions, then use Assign files before processing. Unassigned or unreadable files are skipped with a visible count, duplicate destinations block assignment, and selected destinations replace the files currently in those slots. Individual upload controls remain available.

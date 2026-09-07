@@ -1,5 +1,5 @@
 import * as XLSX_LIB from 'xlsx-js-style';
-import { ProcessedRow } from '../types';
+import { POInputRow, ProcessedRow } from '../types';
 
 // Safely handle default vs named namespace exports
 // @ts-ignore
@@ -68,6 +68,13 @@ const COLUMN_MAPPING: { [key: string]: string } = {
   
   // P: Unit Cost
   'Unit Cost': 'Unit Cost',
+
+  // UK Vendor Central line-item export
+  'Ship-to location': 'Destination Warehouse',
+  'Product name': 'Product Title',
+  'Requested quantity': 'Quantity Requested',
+  'Accepted quantity': 'Expected Quantity',
+  'Cost': 'Unit Cost',
 
   // --- Mappings for OUTER file ---
   'Article No.': 'SKU',
@@ -183,59 +190,68 @@ const formatDateToYYYYMMDD = (dateVal: any): string => {
   return `${year}-${month}-${day}`;
 };
 
-// Modified: readExcel now only accepts a File object.
-export const readExcel = async <T>(file: File): Promise<T[]> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        // CRITICAL FIX v1.1.11: Set cellDates: false to get raw numbers for dates.
-        // This allows our custom parseExcelDate to handle rounding (Math.floor) strictly.
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: false });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Get raw JSON
-        const rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        
-        // DATA NORMALIZATION
-        const normalizedData = rawData.map((row: any) => {
-          const newRow: any = {};
-          
-          Object.keys(row).forEach(rawKey => {
-            const cleanKey = rawKey.trim();
-            // Check mapping
-            const mappedKey = COLUMN_MAPPING[cleanKey] || cleanKey;
-            
-            let value = row[rawKey];
+type Region = NonNullable<POInputRow['_region']>;
+const headerKey = (key: string) => key.trim().replace(/\s+/g, ' ').toLowerCase();
+const normalizedMapping = Object.fromEntries(
+  Object.entries(COLUMN_MAPPING).map(([key, value]) => [headerKey(key), value])
+);
+const numericFields = ['Unit Cost', 'Quantity Requested', 'Expected Quantity', 'Units per Outer', 'After Assembly Orders GMBH'];
+const dateFields = ['Delivery Window Start Date', 'Delivery Window End Date', 'Estimated Delivery Date'];
+const requiredPOFields = ['PO Number', 'ASIN', 'Amazon SKU', 'Quantity Requested', 'Unit Cost', 'Delivery Window End Date'];
 
-            // Special treatment for numeric fields
-            if (['Unit Cost', 'Quantity Requested', 'Expected Quantity', 'Units per Outer', 'After Assembly Orders GMBH'].includes(mappedKey)) {
-               value = parseEuropeanNumber(value);
-            }
-
-            // Special treatment for Date fields
-            if (['Delivery Window Start Date', 'Delivery Window End Date', 'Estimated Delivery Date'].includes(mappedKey)) {
-              value = parseExcelDate(value);
-            }
-
-            newRow[mappedKey] = value;
-          });
-          
-          return newRow;
-        });
-
-        resolve(normalizedData as T[]);
-      } catch (error) {
-        reject(error);
+// A region opts into PO validation; configuration files keep their own SKU column.
+export const parseWorkbook = <T>(workbook: XLSX_LIB.WorkBook, region?: Region): T[] => {
+  const sheetName = (region && workbook.SheetNames.find(name => headerKey(name) === 'line items')) || workbook.SheetNames[0];
+  if (!sheetName) throw new Error('The workbook contains no worksheets.');
+  const worksheet = workbook.Sheets[sheetName];
+  const mapKey = (key: string) => !region && headerKey(key) === 'sku'
+    ? 'SKU' : normalizedMapping[headerKey(key)] || key.trim();
+  const headers = (XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] || []).map((key: any) => mapKey(String(key)));
+  if (region) {
+    const missing = requiredPOFields.filter(key => !headers.includes(key));
+    if (missing.length) throw new Error(`${region} PO: missing columns: ${missing.join(', ')}`);
+  }
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as Record<string, any>[];
+  if (region && !rows.length) throw new Error(`${region} PO: no line items found.`);
+  return rows.map((row, index) => {
+    const result: Record<string, any> = {};
+    const currencyKey = Object.keys(row).find(key => headerKey(key) === 'currency');
+    const currency = String(currencyKey ? row[currencyKey] : '').trim().toUpperCase() || (region === 'UK' ? 'GBP' : 'EUR');
+    for (const [key, rawValue] of Object.entries(row)) {
+      const mappedKey = mapKey(key);
+      let value = rawValue;
+      if (region && requiredPOFields.includes(mappedKey) && (value == null || String(value).trim() === '')) {
+        throw new Error(`${region} PO, row ${index + 2}: invalid ${mappedKey}`);
       }
-    };
-
-    reader.onerror = (error) => reject(error);
-    reader.readAsBinaryString(file);
+      if (numericFields.includes(mappedKey)) {
+        value = typeof value === 'string' && currency === 'GBP' && region
+          ? Number(value.replace(/,/g, '').trim()) : parseEuropeanNumber(value);
+      }
+      if (dateFields.includes(mappedKey)) value = parseExcelDate(value);
+      result[mappedKey] = value;
+    }
+    if (region) {
+      for (const field of requiredPOFields) {
+        const value = result[field];
+        if (value === '' || value == null || (typeof value === 'number' && (!Number.isFinite(value) || value < 0))) {
+          throw new Error(`${region} PO, row ${index + 2}: invalid ${field}`);
+        }
+      }
+      result._region = region;
+      result.Currency = currency;
+    }
+    return result as T;
   });
+};
+
+export const readExcel = async <T>(file: File, region?: Region): Promise<T[]> => {
+  const data = await file.arrayBuffer();
+  try {
+    // Keep dates as serials so normalization never shifts a calendar day.
+    return parseWorkbook<T>(XLSX.read(data, { type: 'array', cellDates: false }), region);
+  } catch (error) {
+    throw new Error(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
 // Removed fetchExcelFromUrl function as it is no longer used.
@@ -272,7 +288,9 @@ export const exportToExcel = (data: ProcessedRow[], fileName: string) => {
         'Availability Stock': safeVal(row['Availability Stock']),
         'Units per Outer': safeVal(row['Units per Outer']),
         'Rejection Comments': safeVal(row['Rejection Comments']),
-        'Nb of Cartons': safeVal(row['Nb of Cartons'])
+        'Nb of Cartons': safeVal(row['Nb of Cartons']),
+        'Region': row._region || 'EU',
+        'Currency': row.Currency || (row._region === 'UK' ? 'GBP' : 'EUR')
       };
   });
 

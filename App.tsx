@@ -183,13 +183,13 @@ const App: React.FC = () => {
       if (!outerFile) throw new Error("Missing Outer (Config) File"); // Changed to outerFile
 
       // 2. Read Files Helper
-      const readOptional = async (file: File | null) => file ? await readExcel<POInputRow>(file) : [];
+      const readOptional = async (file: File | null, region: 'DE' | 'EU' | 'UK') => file ? await readExcel<POInputRow>(file, region) : [];
 
       // 3. Read All Files concurrently
       const [poDataDE, poDataEU, poDataUK, availData, tagsData, outerData] = await Promise.all([
-        readOptional(poFileDE),
-        readOptional(poFileEU),
-        readOptional(poFileUK),
+        readOptional(poFileDE, 'DE'),
+        readOptional(poFileEU, 'EU'),
+        readOptional(poFileUK, 'UK'),
         readExcel<any>(availFile),
         readExcel<any>(tagsFile), // Changed to readExcel(tagsFile)
         readExcel<any>(outerFile)  // Changed to readExcel(outerFile)

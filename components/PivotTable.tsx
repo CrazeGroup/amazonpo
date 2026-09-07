@@ -30,6 +30,9 @@ interface AggregateRow {
 }
 
 export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
+  const currencies = Array.from(new Set(data.map(row => row.Currency || (row._region === 'UK' ? 'GBP' : 'EUR')))).sort();
+  const [selectedCurrency, setSelectedCurrency] = useState('');
+  const currency = currencies.includes(selectedCurrency) ? selectedCurrency : currencies[0] || 'EUR';
   const [groupBy, setGroupBy] = useState<GroupField>('Brand');
   const [globalFilter, setGlobalFilter] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -38,15 +41,16 @@ export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
 
   // 1. Filter Data First (Slicer Logic)
   const filteredData = useMemo(() => {
-    if (!globalFilter) return data;
+    const currencyData = data.filter(row => (row.Currency || (row._region === 'UK' ? 'GBP' : 'EUR')) === currency);
+    if (!globalFilter) return currencyData;
     const lowerFilter = globalFilter.toLowerCase();
     
-    return data.filter(row => {
+    return currencyData.filter(row => {
       return Object.values(row).some(val => 
         String(val).toLowerCase().includes(lowerFilter)
       );
     });
-  }, [data, globalFilter]);
+  }, [data, globalFilter, currency]);
 
   // 2. Group & Aggregate
   const groupedData = useMemo(() => {
@@ -152,6 +156,14 @@ export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
           </div>
         </div>
 
+        <label className="text-xs font-bold text-gray-600">
+          Currency
+          <select aria-label="Currency" value={currency} onChange={e => setSelectedCurrency(e.target.value)} className="ml-2 border border-gray-300 rounded p-2">
+            {currencies.map(code => <option key={code} value={code}>{code}</option>)}
+          </select>
+          <span className="ml-2 font-normal">Totals shown in the selected currency</span>
+        </label>
+
         {/* Global Filter */}
         <div className="relative w-full md:w-96">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -203,13 +215,13 @@ export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
                 className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
                 onClick={() => handleSort('lineTotal')}
               >
-                Total ($) {sortField === 'lineTotal' && (sortDir === 'asc' ? '▲' : '▼')}
+                Total ({currency}) {sortField === 'lineTotal' && (sortDir === 'asc' ? '▲' : '▼')}
               </th>
                <th 
                 className="px-6 py-3 text-right text-xs font-bold text-red-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
                 onClick={() => handleSort('totalCancelled')}
               >
-                Cancelled ($) {sortField === 'totalCancelled' && (sortDir === 'asc' ? '▲' : '▼')}
+                Cancelled ({currency}) {sortField === 'totalCancelled' && (sortDir === 'asc' ? '▲' : '▼')}
               </th>
               <th 
                 className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
@@ -247,10 +259,10 @@ export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
                        {formatNumber(group.expectedQty)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-green-700 font-mono bg-green-50/30">
-                       {formatCurrency(group.lineTotal)} €
+                       {formatCurrency(group.lineTotal)} {currency}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-red-600 font-mono bg-red-50/30">
-                       {group.totalCancelled > 0 ? formatCurrency(group.totalCancelled) + ' €' : '-'}
+                       {group.totalCancelled > 0 ? formatCurrency(group.totalCancelled) + ' ' + currency : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500 font-mono">
                        {formatNumber(group.cartons)}
@@ -286,8 +298,8 @@ export const PivotTable: React.FC<PivotTableProps> = ({ data }) => {
                <td className="px-6 py-4 text-center font-bold font-mono">{grandTotal.count}</td>
                <td className="px-6 py-4 text-right font-bold font-mono">{formatNumber(grandTotal.qtyRequested)}</td>
                <td className="px-6 py-4 text-right font-bold font-mono text-amazon-orange">{formatNumber(grandTotal.expectedQty)}</td>
-               <td className="px-6 py-4 text-right font-bold font-mono">{formatCurrency(grandTotal.lineTotal)} €</td>
-               <td className="px-6 py-4 text-right font-bold font-mono text-red-300">{formatCurrency(grandTotal.totalCancelled)} €</td>
+               <td className="px-6 py-4 text-right font-bold font-mono">{formatCurrency(grandTotal.lineTotal)} {currency}</td>
+               <td className="px-6 py-4 text-right font-bold font-mono text-red-300">{formatCurrency(grandTotal.totalCancelled)} {currency}</td>
                <td className="px-6 py-4 text-right font-bold font-mono">{formatNumber(grandTotal.cartons)}</td>
              </tr>
           </tfoot>

@@ -423,6 +423,8 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   'Estimated Delivery Date': 100,
   'Quantity Requested': 80,
   'Expected Quantity': 80,
+  '_region': 80,
+  'Currency': 90,
   'Unit Cost': 80,
   'Line Total': 100,
   'Availability Stock': 80,
@@ -667,6 +669,8 @@ export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({
             {renderHeader("Estimated Delivery Date", "Est Date")}
             {renderHeader("Quantity Requested", "Qty Req (N)", "bg-gray-50")}
             {renderHeader("Expected Quantity", "Exp Qty (O)", "bg-yellow-50 border-yellow-100")}
+            {renderHeader("_region", "Region")}
+            {renderHeader("Currency", "Currency")}
             {renderHeader("Unit Cost", "Unit Cost (P)", "bg-yellow-50 border-yellow-100")}
             {renderHeader("Line Total", "Total", "bg-green-50 text-green-800 border-green-100")}
             {renderHeader("Availability Stock", "Avail", "bg-purple-50 text-purple-800 border-purple-100")}
@@ -754,6 +758,8 @@ export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({
                 />
               </td>
               
+              <td className="px-1 py-1 border-r">{row._region || 'EU'}</td>
+              <td className="px-1 py-1 border-r">{row.Currency || (row._region === 'UK' ? 'GBP' : 'EUR')}</td>
               <td className="px-1 py-1 border-r truncate">
                 <EditableCell type="number" className={inputClass} value={row['Unit Cost']} onCommit={(val) => handleEdit(row._id, 'Unit Cost', val, row)} />
               </td>

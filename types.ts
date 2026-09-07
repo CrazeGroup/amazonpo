@@ -15,6 +15,7 @@ export interface POInputRow {
   'Quantity Requested': number;
   'Expected Quantity': number;
   'Unit Cost': number;
+  Currency?: string;
   _region?: 'DE' | 'EU' | 'UK'; // Added to track origin
   [key: string]: any;
 }

@@ -239,6 +239,9 @@ export const parseWorkbook = <T>(workbook: XLSX_LIB.WorkBook, region?: Region): 
       }
       result._region = region;
       result.Currency = currency;
+      if (!String(result['Delivery Window Type'] ?? '').trim()) {
+        result['Delivery Window Type'] = 'Delivery Window (Prepaid)';
+      }
     }
     return result as T;
   });

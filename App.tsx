@@ -492,6 +492,12 @@ const App: React.FC = () => {
                   <span className="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-bold rounded-full">
                     {processedData.filter(r => r.isRejected).length} Rej
                   </span>
+                  {availabilityRecords.current.length > 0 && (
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-bold rounded-full flex items-center gap-1" title="Disponibilidad de Business Central conectada">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                      Avail AMZ PO: {availabilityRecords.current.length} arts. BC
+                    </span>
+                  )}
                   {isTableFullscreen && (
                     <span className="text-[11px] font-medium text-slate-500 hidden sm:inline-flex items-center gap-1 bg-slate-200/80 px-2 py-0.5 rounded">
                       <kbd className="font-mono bg-white px-1 rounded shadow-xs text-[10px] border border-slate-300">Esc</kbd> para salir

@@ -44,6 +44,7 @@ export interface ProcessedRow extends POInputRow {
   // Calculated fields
   'Line Total': number;
   'Total Cancelled': number; // New field
+  'Avail AMZ PO'?: number | 'N/A';
   'Availability Stock': number | string; // number or "N/A"
   'Units per Outer': number | string; // number or "N/A"
   'Rejection Comments': string;

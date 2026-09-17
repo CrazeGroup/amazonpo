@@ -428,6 +428,7 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   'Unit Cost': 80,
   'Line Total': 100,
   'Availability Stock': 80,
+  'Avail AMZ PO': 130,
   'Units per Outer': 70,
   'Rejection Comments': 200,
   'Nb of Cartons': 80,
@@ -674,6 +675,7 @@ export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({
             {renderHeader("Unit Cost", "Unit Cost (P)", "bg-yellow-50 border-yellow-100")}
             {renderHeader("Line Total", "Total", "bg-green-50 text-green-800 border-green-100")}
             {renderHeader("Availability Stock", "Avail", "bg-purple-50 text-purple-800 border-purple-100")}
+            {renderHeader("Avail AMZ PO", "Avail AMZ PO", "bg-purple-50 text-purple-800 border-purple-100")}
             {renderHeader("Units per Outer", "Outer", "bg-purple-50 text-purple-800 border-purple-100")}
             {renderHeader("Rejection Comments", "Comments (Click to Change)", "bg-gray-50 border-gray-100")}
             {renderHeader("Nb of Cartons", "Cartons", "bg-green-50 text-green-800 border-green-100")}
@@ -766,6 +768,7 @@ export const ResultsTable = forwardRef<ResultsTableHandle, ResultsTableProps>(({
 
               <td className="px-1 py-1 border-r truncate text-right font-mono font-medium text-green-700">{row['Line Total']?.toFixed(2)}</td>
               <td className="px-1 py-1 border-r truncate text-center font-bold text-sm">{row['Availability Stock']}</td>
+              <td className="px-1 py-1 border-r truncate text-center font-bold text-sm">{row['Avail AMZ PO'] ?? 'N/A'}</td>
               
               {/* EDITABLE OUTER CELL */}
               <td className="px-1 py-1 border-r truncate">

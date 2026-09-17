@@ -8,6 +8,8 @@ import { readExcel, exportToExcel, exportPOConfirmation } from './services/excel
 import { processPOData, recalculateRow } from './services/businessLogic';
 import { ProcessedRow, POInputRow } from './types';
 
+import { fetchItemAvailabilities, enrichAvailability, ItemAvailability } from './services/itemAvailability';
+
 const App: React.FC = () => {
   // Main PO Files (Split by Region)
   const [poFileDE, setPoFileDE] = useState<File | null>(null);
@@ -21,6 +23,7 @@ const App: React.FC = () => {
   const [outerFile, setOuterFile] = useState<File | null>(null); // Reverted to File
 
   // Data State
+  const availabilityRecords = useRef<ItemAvailability[]>([]);
   const [processedData, setProcessedData] = useState<ProcessedRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   // Removed isFetchingConfig state
@@ -73,8 +76,15 @@ const App: React.FC = () => {
   const resultsTableRef = useRef<ResultsTableHandle>(null);
 
   // Demo Data Generator
-  const handleDemoLoad = () => {
+  const handleDemoLoad = async () => {
     setIsProcessing(true);
+    if (availabilityRecords.current.length === 0) {
+      try {
+        availabilityRecords.current = await fetchItemAvailabilities();
+      } catch {
+        // Fallback if offline
+      }
+    }
     setTimeout(() => {
       const mockData: ProcessedRow[] = [
         {
@@ -99,6 +109,7 @@ const App: React.FC = () => {
           'Line Total': 2550,
           'Total Cancelled': 0,
           'Availability Stock': 500,
+          'Avail AMZ PO': 'N/A',
           'Units per Outer': 10,
           'Rejection Comments': 'ACCEPTED',
           'Nb of Cartons': 10,
@@ -128,6 +139,7 @@ const App: React.FC = () => {
           'Line Total': 0,
           'Total Cancelled': 4000,
           'Availability Stock': 0,
+          'Avail AMZ PO': 'N/A',
           'Units per Outer': 5,
           'Rejection Comments': 'OOS REJECT',
           'Nb of Cartons': 0,
@@ -157,18 +169,53 @@ const App: React.FC = () => {
           'Line Total': 250,
           'Total Cancelled': 0,
           'Availability Stock': 1000,
+          'Avail AMZ PO': 'N/A',
           'Units per Outer': 10,
           'Rejection Comments': 'ROUNDED TO OUTER',
           'Nb of Cartons': 5,
           isRejected: false,
           hasError: true,
           _region: 'EU'
+        },
+        {
+          'PO Number': 'PO-9919276',
+          'Vendor Code': 'AMZ-VENDOR-01',
+          'Destination Warehouse': 'DTM2',
+          'ASIN': 'B07CRAZE19276',
+          'EAN Code': '4059779192761',
+          'Code Type': 'EAN',
+          'Amazon SKU': '19276',
+          'Product Title': 'Craze Magic Slime Demo Item 19276',
+          'Availability Status': 'Accepted: In stock',
+          'Delivery Window Type': 'Weekly',
+          'Delivery Window Start Date': '2026-09-14',
+          'Delivery Window End Date': '2026-09-20',
+          'Estimated Delivery Date': '2026-09-16',
+          'Quantity Requested': 92,
+          'Expected Quantity': 92,
+          'Unit Cost': 14.50,
+          _id: 'demo-4',
+          'Brand': 'Craze Demo',
+          'Line Total': 1334,
+          'Total Cancelled': 0,
+          'Availability Stock': 758,
+          'Avail AMZ PO': 758,
+          'Units per Outer': 23,
+          'Rejection Comments': 'ACCEPTED',
+          'Nb of Cartons': 4,
+          isRejected: false,
+          hasError: false,
+          _region: 'DE'
         }
       ];
-      setProcessedData(mockData);
+      setProcessedData(
+        availabilityRecords.current.length > 0
+          ? mockData.map(row => enrichAvailability(row, availabilityRecords.current))
+          : mockData
+      );
       setIsProcessing(false);
       setError(null);
-    }, 800);
+    }, 400);
   };
 
   const handleProcess = async () => {
@@ -211,7 +258,13 @@ const App: React.FC = () => {
 
       // 5. Process Logic
       const results = processPOData(combinedPOData, tagsData, availData, outerData);
-      setProcessedData(results);
+      availabilityRecords.current = [];
+      try {
+        availabilityRecords.current = await fetchItemAvailabilities();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo consultar Avail AMZ PO.');
+      }
+      setProcessedData(results.map(row => enrichAvailability(row, availabilityRecords.current)));
 
     } catch (err: any) {
       console.error(err);
@@ -223,7 +276,7 @@ const App: React.FC = () => {
   };
 
   const handleRowUpdate = (id: string, updatedRow: ProcessedRow) => {
-    const recalculated = recalculateRow(updatedRow);
+    const recalculated = enrichAvailability(recalculateRow(updatedRow), availabilityRecords.current);
     setProcessedData(prevData => 
       prevData.map(row => row._id === id ? recalculated : row)
     );

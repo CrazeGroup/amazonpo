@@ -289,6 +289,7 @@ export const exportToExcel = (data: ProcessedRow[], fileName: string) => {
         'Line Total': safeVal(row['Line Total']),
         'Total Cancelled': safeVal(row['Total Cancelled']),
         'Availability Stock': safeVal(row['Availability Stock']),
+        'Avail AMZ PO': row['Avail AMZ PO'] ?? 'N/A',
         'Units per Outer': safeVal(row['Units per Outer']),
         'Rejection Comments': safeVal(row['Rejection Comments']),
         'Nb of Cartons': safeVal(row['Nb of Cartons']),

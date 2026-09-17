@@ -16,6 +16,8 @@ dist-ssr
 !.env.example
 .antigravity/
 .vercel
+downloads/
+~$*
 
 
 # Editor directories and files
